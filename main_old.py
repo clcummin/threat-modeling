@@ -8,8 +8,7 @@ import streamlit.components.v1 as components
 from PIL import Image
 from io import BytesIO
 from io import StringIO
-from openai import OpenAI
-from openai import AzureOpenAI
+import litellm
 
 global app_input
 
@@ -267,14 +266,12 @@ def process_image(openai_api_key,image):
     image.save(buffered, format="JPEG")
     img_byte_data = buffered.getvalue()
     base64_image = base64.b64encode(img_byte_data).decode('utf-8')
-    
-    client = OpenAI(api_key=openai_api_key, base_url="https://llm.labs.blackduck.com/v1")
-    
-    response = client.chat.completions.create(
-        model="gpt-4o",
+
+    response = litellm.completion(
+        model="litellm_proxy/gpt-4o",
         max_tokens=4000,
         temperature=0,
-        messages = [
+        messages=[
             {
             "role": "system",
             "content": "You are an expert architect. You will be presented with a system diagram that you need to describe in text."
@@ -293,48 +290,47 @@ def process_image(openai_api_key,image):
                 ]
             }
         ],
+        api_key=openai_api_key,
     )
-    
-    response_content = response.choices[0].message.content
+
+    response_content = response["choices"][0]["message"]["content"]
 
     return response_content
     
     
 # Function to get parsed data
 def get_threat_model(openai_api_key, prompt):
-    client = OpenAI(api_key=openai_api_key, base_url="https://llm.labs.blackduck.com/v1")
-
-    response = client.chat.completions.create(
-        model="gpt-4o",
+    response = litellm.completion(
+        model="litellm_proxy/gpt-4o",
         response_format={"type": "json_object"},
         messages=[
             {"role": "system", "content": "You are a helpful assistant designed to output JSON."},
             {"role": "user", "content": prompt}
         ],
         max_tokens=4000,
+        api_key=openai_api_key,
     )
 
     # Convert the JSON string in the 'content' field to a Python dictionary
-    response_content = json.loads(response.choices[0].message.content)
+    response_content = json.loads(response["choices"][0]["message"]["content"])
 
     return response_content
     
 def get_drawio(openai_api_key, prompt):
-    client = OpenAI(api_key=openai_api_key, base_url="https://llm.labs.blackduck.com/v1")
-
-    response = client.chat.completions.create(
-        model="gpt-4o",
+    response = litellm.completion(
+        model="litellm_proxy/gpt-4o",
         messages=[
             {"role": "system", "content": "You are a helpful assistant designed to output a drawio XML. "},
             {"role": "user", "content": prompt}
         ],
         max_tokens=4000,
+        api_key=openai_api_key,
     )
 
     # Convert the JSON string in the 'content' field to a Python dictionary
     #response_content = json.loads(response.choices[0].message.content)
 
-    return response.choices[0].message.content
+    return response["choices"][0]["message"]["content"]
 
  
 # Function to convert JSON to Markdown for display for components   

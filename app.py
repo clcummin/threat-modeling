@@ -22,7 +22,7 @@ CATEGORIES = [
 
 st.title("Threat Modeling Assistant")
 st.write(
-    "Enter attack surfaces and descriptions. Provide your OpenAI API key then submit to classify threats."
+    "Enter attack surfaces and descriptions. Provide your OpenAI API key and optionally a custom endpoint, then submit to classify threats."
 )
 
 default_api_key = os.environ.get("OPENAI_API_KEY", "")
@@ -31,6 +31,9 @@ api_key = st.text_input(
     type="password",
     value=default_api_key,
 ).strip()
+
+api_key = st.text_input("OpenAI API Key", type="password").strip()
+endpoint = st.text_input("AI API Endpoint (optional)").strip()
 
 # Initialize table
 if "data" not in st.session_state:
@@ -69,8 +72,9 @@ Attack Surfaces:
 {chr(10).join([f"#{i}: {r['Attack Surface']} - {r['Description']}" for i, r in enumerate(rows)])}
 """
         try:
+            url = endpoint or "https://api.openai.com/v1/responses"
             response = requests.post(
-                "https://api.openai.com/v1/responses",
+                url,
                 headers={
                     "Authorization": f"Bearer {api_key}",
                     "Content-Type": "application/json",

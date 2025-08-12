@@ -105,6 +105,26 @@ def classify_threats(api_key: str, base_url: str) -> None:
     )
     parsed = json.loads(response.choices[0].message.content)
 
+    # The model is asked to return a JSON list, but in practice the
+    # response may be a single object or wrapped in a dictionary.  This
+    # normalizes the parsed structure into a list of items so that the
+    # subsequent loop works regardless of the exact format and avoids
+    # ``TypeError: string indices must be integers`` when iterating over a
+    # dictionary's keys.
+    if isinstance(parsed, dict):
+        # If the dict already represents a single item with "index" and
+        # "threats" keys, wrap it in a list.  Otherwise attempt to find a
+        # list value inside the dictionary (e.g. under "results" or
+        # similar).  If none is found, treat the entire dict as a single
+        # item.
+        if {"index", "threats"}.issubset(parsed.keys()):
+            parsed = [parsed]
+        else:
+            list_value = next(
+                (v for v in parsed.values() if isinstance(v, list)), None
+            )
+            parsed = list_value if list_value is not None else [parsed]
+
     if "Threat Type" not in st.session_state.data.columns:
         st.session_state.data["Threat Type"] = ""
         st.session_state.data["Threat Description"] = ""

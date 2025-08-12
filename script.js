@@ -63,7 +63,7 @@ ${rows.map(r => `#${r.index}: ${r.surface} - ${r.description}`).join('\n')}
       body: JSON.stringify({
         model: 'gpt-4o-mini',
         input: prompt,
-        text: { format: 'json' }
+        response_format: { type: 'json_object' }
       })
     });
     const data = await res.json();
@@ -72,7 +72,7 @@ ${rows.map(r => `#${r.index}: ${r.surface} - ${r.description}`).join('\n')}
     }
     let parsed;
     try {
-      parsed = JSON.parse(data.output_text);
+      parsed = JSON.parse(data.output[0].content[0].text);
     } catch (e) {
       throw new Error('Failed to parse AI response.');
     }

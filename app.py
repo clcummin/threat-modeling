@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import requests
 import json
+import os
 
 # Threat categories used for classification
 CATEGORIES = [
@@ -23,6 +24,13 @@ st.title("Threat Modeling Assistant")
 st.write(
     "Enter attack surfaces and descriptions. Provide your OpenAI API key and optionally a custom endpoint, then submit to classify threats."
 )
+
+default_api_key = os.environ.get("OPENAI_API_KEY", "")
+api_key = st.text_input(
+    "OpenAI API Key",
+    type="password",
+    value=default_api_key,
+).strip()
 
 api_key = st.text_input("OpenAI API Key", type="password").strip()
 endpoint = st.text_input("AI API Endpoint (optional)").strip()

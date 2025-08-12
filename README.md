@@ -16,10 +16,6 @@ A simple application for documenting potential threats on attack surfaces.
 4. Add rows and fill in attack surfaces with descriptions.
 5. Click **Submit to AI** to classify threats. Two new columns will be filled with threat types and descriptions.
 
-## Static Version
-
-The original client-side version remains available. Open `index.html` locally or via GitHub Pages and follow the same usage steps above.
-
 ### Threat Categories
 
 | id | description |

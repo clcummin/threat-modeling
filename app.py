@@ -31,8 +31,6 @@ api_key = st.text_input(
     type="password",
     value=default_api_key,
 ).strip()
-
-api_key = st.text_input("OpenAI API Key", type="password").strip()
 endpoint = st.text_input("AI API Endpoint (optional)").strip()
 
 # Initialize table

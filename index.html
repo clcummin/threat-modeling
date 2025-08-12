@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Threat Modeling Assistant</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <h1>Threat Modeling Assistant</h1>
+  <p>Enter attack surfaces and descriptions. Provide your OpenAI API key then submit to classify threats.</p>
+  <input type="password" id="api-key" placeholder="OpenAI API Key" />
+  <table id="attack-table">
+    <thead>
+      <tr>
+        <th>Attack Surface</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td contenteditable="true"></td>
+        <td contenteditable="true"></td>
+      </tr>
+    </tbody>
+  </table>
+  <button id="add-row">Add Row</button>
+  <button id="submit-ai">Submit to AI</button>
+  <div id="error" class="error"></div>
+  <script src="script.js"></script>
+</body>
+</html>

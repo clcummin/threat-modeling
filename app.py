@@ -60,6 +60,7 @@ def edit_table() -> None:
         st.session_state.data,
         num_rows="dynamic",
         use_container_width=True,
+        height=600,
         key="data_editor",
     )
     st.session_state.data = edited
@@ -76,8 +77,10 @@ def build_prompt(rows: list[dict]) -> str:
     return (
         "You are a threat modeling assistant. For each attack surface below, "
         "identify applicable threat categories from this list and provide a "
-        "brief description. Omit categories that do not apply. Respond with "
-        "JSON only in the form:\n[\n  {\"index\":0,\"threats\":[{\"type\":\"<category_id>\",\"description\":\"<text>\"}]}\n]\n\n"
+        "contextual and specific description explaining how the threat could be "
+        "carried out to achieve its goal. Omit categories that do not apply. "
+        "Respond with JSON only in the form:\n"
+        "[\n  {\"index\":0,\"threats\":[{\"type\":\"<category_id>\",\"description\":\"<text>\"}]}\n]\n\n"
         f"Threat Categories:\n{categories}\n\n"
         f"Attack Surfaces:\n{surfaces}\n"
     )
@@ -125,19 +128,38 @@ def classify_threats(api_key: str, base_url: str) -> None:
             )
             parsed = list_value if list_value is not None else [parsed]
 
-    if "Threat Type" not in st.session_state.data.columns:
-        st.session_state.data["Threat Type"] = ""
-        st.session_state.data["Threat Description"] = ""
+    # Build a mapping from response index to threats for easier lookup
+    items_by_index = {item.get("index"): item.get("threats", []) for item in parsed}
 
-    for item in parsed:
-        types = "\n".join(t["type"] for t in item["threats"])
-        descs = "\n".join(t["description"] for t in item["threats"])
-        st.session_state.data.at[item["index"], "Threat Type"] = types
-        st.session_state.data.at[item["index"], "Threat Description"] = descs
+    new_rows = []
+    for idx, row in enumerate(rows):
+        threats = items_by_index.get(idx, [])
+        if threats:
+            for threat in threats:
+                new_rows.append(
+                    {
+                        "Attack Surface": row["Attack Surface"],
+                        "Description": row["Description"],
+                        "Threat Type": threat.get("type", ""),
+                        "Threat Description": threat.get("description", ""),
+                    }
+                )
+        else:
+            new_rows.append(
+                {
+                    "Attack Surface": row["Attack Surface"],
+                    "Description": row["Description"],
+                    "Threat Type": "",
+                    "Threat Description": "",
+                }
+            )
+
+    st.session_state.data = pd.DataFrame(new_rows)
 
 
 def main() -> None:
     """Run the Streamlit application."""
+    st.set_page_config(page_title="Threat Modeling Assistant", layout="wide")
     st.title("Threat Modeling Assistant")
     st.write(
         "Enter attack surfaces and descriptions. Provide your OpenAI API key and optionally a custom API base URL, then submit to classify threats."

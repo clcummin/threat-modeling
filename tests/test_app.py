@@ -9,9 +9,6 @@ from pathlib import Path
 # Ensure repository root is on the import path
 sys.path.append(str(Path(__file__).resolve().parents[1]))
 
-# Provide a lightweight stub for litellm to avoid heavy imports during testing
-sys.modules.setdefault('litellm', SimpleNamespace(completion=lambda **kwargs: None))
-
 import app
 
 
@@ -29,28 +26,35 @@ def test_classify_threats_populates_dataframe():
         {"Attack Surface": "Surface B", "Description": "Desc B"},
     ])
 
-    mock_response = {
-        "choices": [
-            {
-                "message": {
-                    "content": json.dumps([
-                        {
-                            "index": 0,
-                            "threats": [
-                                {
-                                    "type": "denial_of_service",
-                                    "description": "Example threat",
-                                }
-                            ],
-                        },
-                        {"index": 1, "threats": []},
-                    ])
-                }
-            }
+    mock_response = SimpleNamespace(
+        choices=[
+            SimpleNamespace(
+                message=SimpleNamespace(
+                    content=json.dumps(
+                        [
+                            {
+                                "index": 0,
+                                "threats": [
+                                    {
+                                        "type": "denial_of_service",
+                                        "description": "Example threat",
+                                    }
+                                ],
+                            },
+                            {"index": 1, "threats": []},
+                        ]
+                    )
+                )
+            )
         ]
-    }
+    )
 
-    with patch("app.litellm.completion", return_value=mock_response):
+    mock_client = SimpleNamespace(
+        chat=SimpleNamespace(
+            completions=SimpleNamespace(create=lambda **kwargs: mock_response)
+        )
+    )
+    with patch("app.OpenAI", return_value=mock_client):
         app.classify_threats("test-key", base_url="")
 
     df = st.session_state.data

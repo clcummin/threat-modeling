@@ -1,9 +1,15 @@
-import streamlit as st
-import pandas as pd
+"""Streamlit application for classifying threats on attack surfaces."""
+
 import json
 import os
 
+import pandas as pd
+import streamlit as st
 from openai import OpenAI
+
+# ---------------------------------------------------------------------------
+# Configuration
+# ---------------------------------------------------------------------------
 
 # Threat categories used for classification
 CATEGORIES = [
@@ -21,79 +27,113 @@ CATEGORIES = [
     {"id": "repudiation", "description": "Denying actions/transactions due to insufficient auditability or tamper-proof logging."},
 ]
 
-st.title("Threat Modeling Assistant")
-st.write(
-    "Enter attack surfaces and descriptions. Provide your OpenAI API key and optionally a custom API base URL, then submit to classify threats."
-)
+DEFAULT_API_KEY = os.environ.get("OPENAI_API_KEY", "")
+DEFAULT_BASE_URL = os.environ.get("OPENAI_BASE_URL", "")
 
-default_api_key = os.environ.get("OPENAI_API_KEY", "")
-api_key = st.text_input(
-    "OpenAI API Key",
-    type="password",
-    value=default_api_key,
-).strip()
-default_base_url = os.environ.get("OPENAI_BASE_URL", "")
-base_url = st.text_input("AI API Base URL (optional)", value=default_base_url).strip()
 
-# Initialize table
-if "data" not in st.session_state:
-    st.session_state.data = pd.DataFrame(
-        [{"Attack Surface": "", "Description": ""}]
+# ---------------------------------------------------------------------------
+# Helper functions
+# ---------------------------------------------------------------------------
+
+def init_state() -> None:
+    """Initialize session state with an editable dataframe."""
+    if "data" not in st.session_state:
+        st.session_state.data = pd.DataFrame([
+            {"Attack Surface": "", "Description": ""}
+        ])
+
+
+def get_credentials() -> tuple[str, str]:
+    """Render text inputs for API credentials and return their values."""
+    api_key = st.text_input(
+        "OpenAI API Key", type="password", value=DEFAULT_API_KEY
+    ).strip()
+    base_url = st.text_input(
+        "AI API Base URL (optional)", value=DEFAULT_BASE_URL
+    ).strip()
+    return api_key, base_url
+
+
+def edit_table() -> None:
+    """Display and update the attack surface table."""
+    edited = st.data_editor(
+        st.session_state.data,
+        num_rows="dynamic",
+        use_container_width=True,
+        key="data_editor",
+    )
+    st.session_state.data = edited
+
+
+def build_prompt(rows: list[dict]) -> str:
+    """Construct the prompt for the AI model."""
+    categories = "\n".join(
+        f"{c['id']}: {c['description']}" for c in CATEGORIES
+    )
+    surfaces = "\n".join(
+        f"#{i}: {r['Attack Surface']} - {r['Description']}" for i, r in enumerate(rows)
+    )
+    return (
+        "You are a threat modeling assistant. For each attack surface below, "
+        "identify applicable threat categories from this list and provide a "
+        "brief description. Omit categories that do not apply. Respond with "
+        "JSON only in the form:\n[\n  {\"index\":0,\"threats\":[{\"type\":\"<category_id>\",\"description\":\"<text>\"}]}\n]\n\n"
+        f"Threat Categories:\n{categories}\n\n"
+        f"Attack Surfaces:\n{surfaces}\n"
     )
 
-# Allow user to edit table dynamically
-edited = st.data_editor(
-    st.session_state.data,
-    num_rows="dynamic",
-    use_container_width=True,
-    key="data_editor",
-)
-st.session_state.data = edited
 
-if st.button("Submit to AI"):
-    if not api_key:
-        st.error("API key required.")
-    else:
-        rows = (
-            st.session_state.data[["Attack Surface", "Description"]]
-            .fillna("")
-            .to_dict(orient="records")
-        )
-        prompt = f"""
-You are a threat modeling assistant. For each attack surface below, identify applicable threat categories from this list and provide a brief description. Omit categories that do not apply. Respond with JSON only in the form:
-[
-  {{"index":0,"threats":[{{"type":"<category_id>","description":"<text>"}}]}}
-]
+def classify_threats(api_key: str, base_url: str) -> None:
+    """Call the OpenAI API and populate the table with threat data."""
+    rows = (
+        st.session_state.data[["Attack Surface", "Description"]]
+        .fillna("")
+        .to_dict(orient="records")
+    )
+    prompt = build_prompt(rows)
+    client = OpenAI(api_key=api_key, base_url=base_url) if base_url else OpenAI(api_key=api_key)
+    response = client.chat.completions.create(
+        model="gpt-4o-mini",
+        response_format={"type": "json_object"},
+        messages=[
+            {"role": "system", "content": "You are a threat modeling assistant."},
+            {"role": "user", "content": prompt},
+        ],
+    )
+    parsed = json.loads(response.choices[0].message.content)
 
-Threat Categories:
-{chr(10).join([f"{c['id']}: {c['description']}" for c in CATEGORIES])}
+    if "Threat Type" not in st.session_state.data.columns:
+        st.session_state.data["Threat Type"] = ""
+        st.session_state.data["Threat Description"] = ""
 
-Attack Surfaces:
-{chr(10).join([f"#{i}: {r['Attack Surface']} - {r['Description']}" for i, r in enumerate(rows)])}
-"""
-        try:
-            client = OpenAI(api_key=api_key, base_url=base_url) if base_url else OpenAI(api_key=api_key)
-            response = client.chat.completions.create(
-                model="gpt-4o-mini",
-                response_format={"type": "json_object"},
-                messages=[
-                    {"role": "system", "content": "You are a threat modeling assistant."},
-                    {"role": "user", "content": prompt},
-                ],
-            )
-            parsed = json.loads(response.choices[0].message.content)
+    for item in parsed:
+        types = "\n".join(t["type"] for t in item["threats"])
+        descs = "\n".join(t["description"] for t in item["threats"])
+        st.session_state.data.at[item["index"], "Threat Type"] = types
+        st.session_state.data.at[item["index"], "Threat Description"] = descs
 
-            if "Threat Type" not in st.session_state.data.columns:
-                st.session_state.data["Threat Type"] = ""
-                st.session_state.data["Threat Description"] = ""
 
-            for item in parsed:
-                types = "\n".join(t["type"] for t in item["threats"])
-                descs = "\n".join(t["description"] for t in item["threats"])
-                st.session_state.data.at[item["index"], "Threat Type"] = types
-                st.session_state.data.at[item["index"], "Threat Description"] = descs
+def main() -> None:
+    """Run the Streamlit application."""
+    st.title("Threat Modeling Assistant")
+    st.write(
+        "Enter attack surfaces and descriptions. Provide your OpenAI API key and optionally a custom API base URL, then submit to classify threats."
+    )
 
-            st.experimental_rerun()
-        except Exception as e:
-            st.error(str(e))
+    init_state()
+    api_key, base_url = get_credentials()
+    edit_table()
 
+    if st.button("Submit to AI"):
+        if not api_key:
+            st.error("API key required.")
+        else:
+            try:
+                classify_threats(api_key, base_url)
+                st.experimental_rerun()
+            except Exception as e:
+                st.error(str(e))
+
+
+if __name__ == "__main__":
+    main()

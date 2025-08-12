@@ -96,7 +96,7 @@ def classify_threats(api_key: str, base_url: str) -> None:
     response = client.chat.completions.create(
         model="gpt-4o",
         response_format={"type": "json_object"},
-        max_toens=4000,
+        max_tokens=4000,
         messages=[
             {"role": "system", "content": "You are a threat modeling assistant designed to output JSON without markdown formatting. Output raw JSON"},
             {"role": "user", "content": prompt},

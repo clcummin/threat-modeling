@@ -5,7 +5,7 @@ import os
 
 import pandas as pd
 import streamlit as st
-from openai import OpenAI
+import litellm
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -84,23 +84,25 @@ def build_prompt(rows: list[dict]) -> str:
 
 
 def classify_threats(api_key: str, base_url: str) -> None:
-    """Call the OpenAI API and populate the table with threat data."""
+    """Call the AI model via LiteLLM and populate the table with threat data."""
     rows = (
         st.session_state.data[["Attack Surface", "Description"]]
         .fillna("")
         .to_dict(orient="records")
     )
     prompt = build_prompt(rows)
-    client = OpenAI(api_key=api_key, base_url=base_url) if base_url else OpenAI(api_key=api_key)
-    response = client.chat.completions.create(
-        model="gpt-4o-mini",
-        response_format={"type": "json_object"},
-        messages=[
+    params = {
+        "model": "litellm_proxy/gpt-4o",
+        "messages": [
             {"role": "system", "content": "You are a threat modeling assistant."},
             {"role": "user", "content": prompt},
         ],
-    )
-    parsed = json.loads(response.choices[0].message.content)
+        "api_key": api_key,
+    }
+    if base_url:
+        params["base_url"] = base_url
+    response = litellm.completion(**params)
+    parsed = json.loads(response["choices"][0]["message"]["content"])
 
     if "Threat Type" not in st.session_state.data.columns:
         st.session_state.data["Threat Type"] = ""

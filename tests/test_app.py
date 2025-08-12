@@ -154,3 +154,29 @@ def test_classify_threats_multiple_threats_create_multiple_rows():
     assert len(df) == 2
     assert all(df["Attack Surface"] == "Surface A")
     assert set(df["Threat Type"]) == {"denial_of_service", "trojan"}
+
+
+def test_edit_table_persists_edits_via_on_change():
+    """Edits in the table should sync to session_state via on_change."""
+    st.session_state.clear()
+    st.session_state.data = pd.DataFrame([
+        {"Attack Surface": "", "Description": ""}
+    ])
+
+    updated_df = pd.DataFrame([
+        {"Attack Surface": "Surface X", "Description": "Desc X"}
+    ])
+
+    def fake_data_editor(*args, **kwargs):
+        # Ensure on_change callback is provided
+        callback = kwargs.get("on_change")
+        assert callable(callback)
+        # Simulate user edit by setting widget value and invoking callback
+        st.session_state["data_editor"] = updated_df
+        callback()
+        return updated_df
+
+    with patch("app.st.data_editor", side_effect=fake_data_editor):
+        app.edit_table()
+
+    assert st.session_state.data.equals(updated_df)

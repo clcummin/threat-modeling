@@ -1,8 +1,9 @@
 import streamlit as st
 import pandas as pd
-import requests
 import json
 import os
+
+from openai import OpenAI
 
 # Threat categories used for classification
 CATEGORIES = [
@@ -71,25 +72,16 @@ Attack Surfaces:
 {chr(10).join([f"#{i}: {r['Attack Surface']} - {r['Description']}" for i, r in enumerate(rows)])}
 """
         try:
-            url = (
-                f"{base_url.rstrip('/')}/v1/responses" if base_url else "https://api.openai.com/v1/responses"
+            client = OpenAI(api_key=api_key, base_url=base_url) if base_url else OpenAI(api_key=api_key)
+            response = client.chat.completions.create(
+                model="gpt-4o-mini",
+                response_format={"type": "json_object"},
+                messages=[
+                    {"role": "system", "content": "You are a threat modeling assistant."},
+                    {"role": "user", "content": prompt},
+                ],
             )
-            response = requests.post(
-                url,
-                headers={
-                    "Authorization": f"Bearer {api_key}",
-                    "Content-Type": "application/json",
-                },
-                json={
-                    "model": "gpt-4o-mini",
-                    "input": prompt,
-                    "response_format": {"type": "json_object"},
-                },
-                timeout=30,
-            )
-            response.raise_for_status()
-            body = response.json()
-            parsed = json.loads(body["output"][0]["content"][0]["text"])
+            parsed = json.loads(response.choices[0].message.content)
 
             if "Threat Type" not in st.session_state.data.columns:
                 st.session_state.data["Threat Type"] = ""
@@ -99,9 +91,7 @@ Attack Surfaces:
                 types = "\n".join(t["type"] for t in item["threats"])
                 descs = "\n".join(t["description"] for t in item["threats"])
                 st.session_state.data.at[item["index"], "Threat Type"] = types
-                st.session_state.data.at[
-                    item["index"], "Threat Description"
-                ] = descs
+                st.session_state.data.at[item["index"], "Threat Description"] = descs
 
             st.experimental_rerun()
         except Exception as e:

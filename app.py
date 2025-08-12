@@ -132,7 +132,7 @@ def main() -> None:
         else:
             try:
                 classify_threats(api_key, base_url)
-                st.experimental_rerun()
+                st.rerun()
             except Exception as e:
                 st.error(str(e))
 

@@ -94,9 +94,11 @@ def classify_threats(api_key: str, base_url: str) -> None:
 
     client = OpenAI(api_key=api_key, base_url=base_url or None)
     response = client.chat.completions.create(
-        model="gpt-4o-mini",
+        model="gpt-4o",
+        response_format={"type": "json_object"},
+        max_toens=4000,
         messages=[
-            {"role": "system", "content": "You are a threat modeling assistant."},
+            {"role": "system", "content": "You are a threat modeling assistant designed to output JSON without markdown formatting. Output raw JSON"},
             {"role": "user", "content": prompt},
         ],
         temperature=0,

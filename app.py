@@ -55,15 +55,32 @@ def get_credentials() -> tuple[str, str]:
 
 
 def edit_table() -> None:
-    """Display and update the attack surface table."""
-    edited = st.data_editor(
+    """Display and update the attack surface table.
+
+    The previous implementation assigned the result of ``st.data_editor``
+    directly to ``st.session_state.data`` on every rerun.  This extra
+    assignment caused Streamlit to trigger an additional rerun while an
+    edit was in progress, occasionally wiping out the user's current
+    input when they pressed Enter, Tab, or clicked away from the table.
+
+    To avoid this, we now update ``st.session_state.data`` only when the
+    editor reports a change via ``on_change``.  This mirrors Streamlit's
+    recommended pattern for persisting edits and prevents duplicate
+    reruns that could discard the user's entry.
+    """
+
+    def _sync_editor() -> None:
+        """Synchronize the widget's value back to ``session_state``."""
+        st.session_state.data = st.session_state["data_editor"]
+
+    st.data_editor(
         st.session_state.data,
         num_rows="dynamic",
         use_container_width=True,
         height=600,
         key="data_editor",
+        on_change=_sync_editor,
     )
-    st.session_state.data = edited
 
 
 def build_prompt(rows: list[dict]) -> str:

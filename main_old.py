@@ -268,7 +268,7 @@ def process_image(openai_api_key,image):
     img_byte_data = buffered.getvalue()
     base64_image = base64.b64encode(img_byte_data).decode('utf-8')
     
-    client = OpenAI(api_key=openai_api_key, base_url="https://llm.labs.polaris.synopsys.com/v1")
+    client = OpenAI(api_key=openai_api_key, base_url="https://llm.labs.blackduck.com/v1")
     
     response = client.chat.completions.create(
         model="gpt-4o",
@@ -302,7 +302,7 @@ def process_image(openai_api_key,image):
     
 # Function to get parsed data
 def get_threat_model(openai_api_key, prompt):
-    client = OpenAI(api_key=openai_api_key, base_url="https://llm.labs.polaris.synopsys.com/v1")
+    client = OpenAI(api_key=openai_api_key, base_url="https://llm.labs.blackduck.com/v1")
 
     response = client.chat.completions.create(
         model="gpt-4o",
@@ -320,7 +320,7 @@ def get_threat_model(openai_api_key, prompt):
     return response_content
     
 def get_drawio(openai_api_key, prompt):
-    client = OpenAI(api_key=openai_api_key, base_url="https://llm.labs.polaris.synopsys.com/v1")
+    client = OpenAI(api_key=openai_api_key, base_url="https://llm.labs.blackduck.com/v1")
 
     response = client.chat.completions.create(
         model="gpt-4o",

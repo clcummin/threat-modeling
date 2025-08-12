@@ -12,7 +12,7 @@ A simple application for documenting potential threats on attack surfaces.
    ```bash
    streamlit run app.py
    ```
-3. Provide your OpenAI API key in the input field and optionally set a custom API endpoint.
+3. Provide your OpenAI API key in the input field and optionally set a custom API base URL (or via `OPENAI_BASE_URL`).
 4. Add rows and fill in attack surfaces with descriptions.
 5. Click **Submit to AI** to classify threats. Two new columns will be filled with threat types and descriptions.
 

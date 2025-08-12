@@ -63,7 +63,7 @@ ${rows.map(r => `#${r.index}: ${r.surface} - ${r.description}`).join('\n')}
       body: JSON.stringify({
         model: 'gpt-4o-mini',
         input: prompt,
-        response_format: { type: 'json_object' }
+        text: { format: 'json' }
       })
     });
     const data = await res.json();

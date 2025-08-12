@@ -1,13 +1,24 @@
 # Threat Modeling
 
-A simple client-side application for documenting potential threats on attack surfaces.
+A simple application for documenting potential threats on attack surfaces.
 
-## Usage
+## Streamlit Deployment
 
-1. Open `index.html` locally or via GitHub Pages.
-2. Provide your OpenAI API key in the input field.
-3. Add rows and fill in attack surfaces with descriptions.
-4. Click **Submit to AI** to classify threats. Two new columns will be filled with threat types and descriptions.
+1. Install dependencies:
+   ```bash
+   pip install -r requirements.txt
+   ```
+2. Run the app:
+   ```bash
+   streamlit run app.py
+   ```
+3. Provide your OpenAI API key in the input field.
+4. Add rows and fill in attack surfaces with descriptions.
+5. Click **Submit to AI** to classify threats. Two new columns will be filled with threat types and descriptions.
+
+## Static Version
+
+The original client-side version remains available. Open `index.html` locally or via GitHub Pages and follow the same usage steps above.
 
 ### Threat Categories
 
@@ -25,7 +36,3 @@ A simple client-side application for documenting potential threats on attack sur
 | `trojan` | Malicious/compromised components introduced via supply chain or artifact. |
 | `guessing` | Ability to deduce or predict sensitive values (e.g., keys, tokens, identifiers). |
 | `repudiation` | Denying actions/transactions due to insufficient auditability or tamper-proof logging. |
-
-## Development
-
-The project is entirely static. Open the HTML file directly or host it with GitHub Pages.

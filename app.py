@@ -24,7 +24,7 @@ st.write(
     "Enter attack surfaces and descriptions. Provide your OpenAI API key then submit to classify threats."
 )
 
-api_key = st.text_input("OpenAI API Key", type="password")
+api_key = st.text_input("OpenAI API Key", type="password").strip()
 
 # Initialize table
 if "data" not in st.session_state:

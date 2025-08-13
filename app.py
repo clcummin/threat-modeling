@@ -38,9 +38,12 @@ DEFAULT_BASE_URL = os.environ.get("OPENAI_BASE_URL", "")
 def init_state() -> None:
     """Initialize session state with an editable dataframe."""
     if "data" not in st.session_state:
-        st.session_state.data = pd.DataFrame([
-            {"Attack Surface": "", "Description": ""}
-        ])
+        # Prepopulate the table with a handful of empty rows so the user
+        # is presented with a small, manageable starting point while still
+        # retaining the ability to add more surfaces dynamically.
+        st.session_state.data = pd.DataFrame(
+            [{"Attack Surface": "", "Description": ""} for _ in range(5)]
+        )
 
 
 def get_credentials() -> tuple[str, str]:
@@ -81,9 +84,16 @@ def edit_table() -> None:
         # ``DataFrame`` regardless of how Streamlit stores the intermediate
         # representation.
         if not isinstance(value, pd.DataFrame):
-            value = (
-                pd.DataFrame.from_dict(value, orient="index").reset_index(drop=True)
-            )
+            # ``st.data_editor`` may store the edited value either as a dictionary
+            # (via ``DataFrame.to_dict(orient="index")``) or as a list of
+            # records.  Handle both possibilities to avoid ``AttributeError`` when
+            # Pandas expects mapping-like objects during conversion.
+            if isinstance(value, dict):
+                value = pd.DataFrame.from_dict(value, orient="index").reset_index(
+                    drop=True
+                )
+            else:
+                value = pd.DataFrame(value)
         st.session_state.data = value
 
     st.data_editor(

@@ -71,7 +71,20 @@ def edit_table() -> None:
 
     def _sync_editor() -> None:
         """Synchronize the widget's value back to ``session_state``."""
-        st.session_state.data = st.session_state["data_editor"]
+        value = st.session_state["data_editor"]
+        # ``st.data_editor`` stores its value in ``session_state`` using a
+        # plain ``dict`` when edited.  Passing that dict back to the widget on
+        # the next rerun causes Pandas to interpret it as a nested structure and
+        # raise ``AttributeError: 'list' object has no attribute 'items'`` while
+        # attempting to convert it to a ``DataFrame``.  Converting the widget's
+        # value explicitly ensures ``st.session_state.data`` remains a
+        # ``DataFrame`` regardless of how Streamlit stores the intermediate
+        # representation.
+        if not isinstance(value, pd.DataFrame):
+            value = (
+                pd.DataFrame.from_dict(value, orient="index").reset_index(drop=True)
+            )
+        st.session_state.data = value
 
     st.data_editor(
         st.session_state.data,

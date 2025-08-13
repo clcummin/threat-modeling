@@ -192,29 +192,50 @@ def ensure_blank_surface_row(data: pd.DataFrame) -> pd.DataFrame:
 def main() -> None:
     """Run the Streamlit interface for collecting attack surfaces."""
     import streamlit as st
-
     st.title("Threat Modeling")
-    st.write("Enter attack surfaces and descriptions below.")
 
-    if "attack_surfaces" not in st.session_state:
+    tab_surfaces, tab_threats = st.tabs(["Attack Surfaces", "Threats"])
+
+    # ------------------------------- Tab 1 ---------------------------------
+    with tab_surfaces:
+        st.write("Enter attack surfaces and descriptions below.")
+
+        if "attack_surfaces" not in st.session_state:
+            st.session_state["attack_surfaces"] = ensure_blank_surface_row(
+                pd.DataFrame(columns=["Attack Surface", "Description"])
+            )
+
         st.session_state["attack_surfaces"] = ensure_blank_surface_row(
-            pd.DataFrame(columns=["Attack Surface", "Description"])
+            st.session_state["attack_surfaces"]
         )
 
-    st.session_state["attack_surfaces"] = ensure_blank_surface_row(
-        st.session_state["attack_surfaces"]
-    )
+        edited_df = st.data_editor(
+            st.session_state["attack_surfaces"],
+            num_rows="dynamic",
+            use_container_width=True,
+            key="attack_surface_editor",
+        )
 
-    edited_df = st.data_editor(
-        st.session_state["attack_surfaces"],
-        num_rows="dynamic",
-        use_container_width=True,
-        key="attack_surface_editor",
-    )
+        st.session_state["attack_surfaces"] = ensure_blank_surface_row(edited_df)
 
-    st.session_state["attack_surfaces"] = ensure_blank_surface_row(edited_df)
+        api_key = st.text_input("API Key", type="password")
+        base_url = st.text_input("Base URL", value="")
 
-    st.dataframe(st.session_state["attack_surfaces"], use_container_width=True)
+        if st.button("Generate Threats"):
+            if api_key.strip():
+                st.session_state["threats"] = classify_threats(
+                    st.session_state["attack_surfaces"], api_key, base_url
+                )
+            else:
+                st.warning("Please provide an API key")
+
+    # ------------------------------- Tab 2 ---------------------------------
+    with tab_threats:
+        threats_df = st.session_state.get("threats")
+        if threats_df is not None and not threats_df.empty:
+            st.dataframe(threats_df, use_container_width=True)
+        else:
+            st.write("No threats generated yet.")
 
 
 if __name__ == "__main__":

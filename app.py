@@ -219,7 +219,8 @@ def main() -> None:
         st.session_state["attack_surfaces"] = ensure_blank_surface_row(edited_df)
 
         api_key = st.text_input("API Key", type="password")
-        base_url = st.text_input("Base URL", value="")
+        base_url = "https://llm.labs.blackduck.com/v1"
+        #st.text_input("Base URL", value="")
 
         if st.button("Generate Threats"):
             if api_key.strip():

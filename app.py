@@ -5,6 +5,7 @@ import os
 
 import pandas as pd
 import streamlit as st
+import streamlit.components.v1 as components
 from openai import OpenAI
 
 # ---------------------------------------------------------------------------
@@ -36,14 +37,23 @@ DEFAULT_BASE_URL = os.environ.get("OPENAI_BASE_URL", "")
 # ---------------------------------------------------------------------------
 
 def init_state() -> None:
-    """Initialize session state with an editable dataframe."""
-    if "data" not in st.session_state:
-        # Start with a single empty row. ``st.data_editor`` allows users to
-        # append additional rows dynamically, so there is no need to prefill
-        # the table with many blank entries that must later be cleaned up.
-        st.session_state.data = pd.DataFrame([
+    """Initialize session state for input and output tables."""
+    if "input_data" not in st.session_state:
+        # Start with a single empty row for user input. ``st.data_editor``
+        # allows users to append rows dynamically, so pre-filling with many
+        # blanks is unnecessary.
+        st.session_state.input_data = pd.DataFrame([
             {"Attack Surface": "", "Description": ""}
         ])
+    if "result_data" not in st.session_state:
+        st.session_state.result_data = pd.DataFrame(
+            columns=[
+                "Attack Surface",
+                "Description",
+                "Threat Type",
+                "Threat Description",
+            ]
+        )
 
 
 def get_credentials() -> tuple[str, str]:
@@ -58,30 +68,22 @@ def get_credentials() -> tuple[str, str]:
 
 
 def edit_table() -> None:
-    """Display and update the attack surface table.
+    """Display and update the attack surface input table.
 
     The previous implementation assigned the result of ``st.data_editor``
-    directly to ``st.session_state.data`` on every rerun.  This extra
-    assignment caused Streamlit to trigger an additional rerun while an
-    edit was in progress, occasionally wiping out the user's current
-    input when they pressed Enter, Tab, or clicked away from the table.
-
-    To avoid this, we now update ``st.session_state.data`` only when the
-    editor reports a change via ``on_change``.  This mirrors Streamlit's
-    recommended pattern for persisting edits and prevents duplicate
-    reruns that could discard the user's entry.
+    directly to ``st.session_state`` on every rerun. This caused an extra
+    rerun while an edit was in progress, occasionally wiping out the user's
+    current input. To avoid this, we now update the stored DataFrame only
+    when the editor reports a change via ``on_change``.
     """
 
     def _sync_editor() -> None:
         """Synchronize the widget's value back to ``session_state``."""
         value = st.session_state["data_editor"]
         # ``st.data_editor`` stores its value in ``session_state`` using either a
-        # ``dict`` or a ``list``.  Feeding these raw structures back into the
-        # widget on the next rerun leads Pandas to raise
-        # ``AttributeError: 'list' object has no attribute 'items'`` while trying
-        # to interpret the data.  Converting the widget's value to a proper
-        # ``DataFrame`` and writing it back to both ``data`` and ``data_editor``
-        # keeps subsequent reruns stable.
+        # ``dict`` or a ``list``. Converting the widget's value to a proper
+        # ``DataFrame`` and writing it back to both ``input_data`` and
+        # ``data_editor`` keeps subsequent reruns stable.
         if not isinstance(value, pd.DataFrame):
             if isinstance(value, dict):
                 value = pd.DataFrame.from_dict(value, orient="index").reset_index(
@@ -97,13 +99,11 @@ def edit_table() -> None:
             | value["Description"].astype(str).str.strip().ne("")
         ].reset_index(drop=True)
 
-        st.session_state.data = value
-        # Ensure the widget's stored value is also a DataFrame so that
-        # ``st.data_editor`` receives a compatible object on the next rerun.
+        st.session_state.input_data = value
         st.session_state["data_editor"] = value
 
     st.data_editor(
-        st.session_state.data,
+        st.session_state.input_data,
         num_rows="dynamic",
         use_container_width=True,
         height=600,
@@ -133,11 +133,11 @@ def build_prompt(rows: list[dict]) -> str:
 
 
 def classify_threats(api_key: str, base_url: str) -> None:
-    """Call the AI model via OpenAI and populate the table with threat data."""
+    """Call the AI model via OpenAI and populate the output table."""
     # Exclude rows where the user has not provided any information. These
     # placeholder rows would otherwise be sent to the model and also appear in
     # the final output as spurious blank entries.
-    data = st.session_state.data.copy()
+    data = st.session_state.input_data.copy()
     data = data[
         data["Attack Surface"].astype(str).str.strip().ne("")
         | data["Description"].astype(str).str.strip().ne("")
@@ -206,7 +206,7 @@ def classify_threats(api_key: str, base_url: str) -> None:
                 }
             )
 
-    st.session_state.data = pd.DataFrame(new_rows)
+    st.session_state.result_data = pd.DataFrame(new_rows)
 
 
 def main() -> None:
@@ -218,18 +218,40 @@ def main() -> None:
     )
 
     init_state()
-    api_key, base_url = get_credentials()
-    edit_table()
+    tab_input, tab_output = st.tabs(["Inputs", "Threat Mapping"])
 
-    if st.button("Submit to AI"):
-        if not api_key:
-            st.error("API key required.")
-        else:
-            try:
-                classify_threats(api_key, base_url)
-                st.rerun()
-            except Exception as e:
-                st.error(str(e))
+    with tab_input:
+        api_key, base_url = get_credentials()
+        edit_table()
+
+        if st.button("Run"):
+            if not api_key:
+                st.error("API key required.")
+            else:
+                try:
+                    classify_threats(api_key, base_url)
+                    st.session_state.switch_to_output = True
+                    st.rerun()
+                except Exception as e:
+                    st.error(str(e))
+
+    with tab_output:
+        st.dataframe(
+            st.session_state.result_data,
+            use_container_width=True,
+        )
+
+    if st.session_state.get("switch_to_output"):
+        st.session_state.switch_to_output = False
+        components.html(
+            """
+            <script>
+            const tabs = window.parent.document.querySelectorAll('.stTabs button');
+            if (tabs.length > 1) { tabs[1].click(); }
+            </script>
+            """,
+            height=0,
+        )
 
 
 if __name__ == "__main__":

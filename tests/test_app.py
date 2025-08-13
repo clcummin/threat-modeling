@@ -18,8 +18,19 @@ import app
 def test_build_prompt_contains_surfaces_and_categories():
     rows = [{"Attack Surface": "Login", "Description": "User login"}]
     prompt = app.build_prompt(rows)
-    assert "Login - User login" in prompt
+    assert "| Index | Attack Surface | Description |" in prompt
+    assert "| 0 | Login | User login |" in prompt
     assert "information_leakage" in prompt
+
+
+def test_collect_attack_surfaces_accepts_multiple_entries():
+    responses = ["Login", "User login", "Checkout", "Checkout flow", ""]
+    with patch("builtins.input", side_effect=responses):
+        rows = app.collect_attack_surfaces()
+    assert rows == [
+        {"Attack Surface": "Login", "Description": "User login"},
+        {"Attack Surface": "Checkout", "Description": "Checkout flow"},
+    ]
 
 
 def test_classify_threats_populates_dataframe():

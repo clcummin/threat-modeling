@@ -1,10 +1,9 @@
-"""Streamlit application for classifying threats on attack surfaces."""
+"""Utilities for classifying threats on attack surfaces."""
 
 import json
 import os
 
 import pandas as pd
-import streamlit as st
 from openai import OpenAI
 
 # ---------------------------------------------------------------------------
@@ -27,93 +26,6 @@ CATEGORIES = [
     {"id": "repudiation", "description": "Denying actions/transactions due to insufficient auditability or tamper-proof logging."},
 ]
 
-DEFAULT_API_KEY = os.environ.get("OPENAI_API_KEY", "")
-DEFAULT_BASE_URL = os.environ.get("OPENAI_BASE_URL", "")
-
-
-# ---------------------------------------------------------------------------
-# Helper functions
-# ---------------------------------------------------------------------------
-
-def init_state() -> None:
-    """Initialize session state for input and output tables."""
-    if "input_df" not in st.session_state:
-        st.session_state.input_df = pd.DataFrame(
-            [{"Attack Surface": "", "Description": ""}]
-        )
-    if "results_df" not in st.session_state:
-        st.session_state.results_df = pd.DataFrame()
-
-
-def get_credentials() -> tuple[str, str]:
-    """Render text inputs for API credentials and return their values."""
-    api_key = st.text_input(
-        "OpenAI API Key", type="password", value=DEFAULT_API_KEY
-    ).strip()
-    base_url = st.text_input(
-        "AI API Base URL (optional)", value=DEFAULT_BASE_URL
-    ).strip()
-    return api_key, base_url
-
-
-def edit_table() -> None:
-    """Display and update the attack surface input table."""
-
-    def _sync_editor() -> None:
-        # Prefer the editor value, fall back to current input/data
-        value = st.session_state.get(
-            "data_editor",
-            st.session_state.get("input_df", st.session_state.get("data")),
-        )
-
-        # --- Normalize to a DataFrame robustly ---
-        if isinstance(value, pd.DataFrame):
-            df = value.copy()
-        elif isinstance(value, dict):
-            # dict-of-lists/Series -> DataFrame(value)
-            if all(isinstance(v, (list, tuple, pd.Series)) for v in value.values()):
-                df = pd.DataFrame(value)
-            # dict-of-dicts -> from_dict(..., orient="index")
-            elif all(isinstance(v, dict) for v in value.values()):
-                df = pd.DataFrame.from_dict(value, orient="index")
-            else:
-                # single flat dict -> one row
-                df = pd.DataFrame.from_records([value])
-        elif isinstance(value, (list, tuple)):
-            # list-of-dicts or list-like -> DataFrame handles both
-            df = pd.DataFrame(value)
-        else:
-            # last resort: wrap as single row
-            df = pd.DataFrame.from_records([{"Attack Surface": "", "Description": ""}])
-
-        # Ensure required columns exist
-        for col in ["Attack Surface", "Description"]:
-            if col not in df.columns:
-                df[col] = ""
-
-        # Keep only rows where at least one field has content
-        df = df[
-            df["Attack Surface"].astype(str).str.strip().ne("")
-            | df["Description"].astype(str).str.strip().ne("")
-        ].reset_index(drop=True)
-
-        # Write back to state (supporting either input_df or data usage)
-        if "input_df" in st.session_state:
-            st.session_state.input_df = df
-        else:
-            st.session_state.data = df
-        st.session_state["data_editor"] = df
-
-    st.data_editor(
-        st.session_state.get("input_df", st.session_state.get("data")),
-        num_rows="dynamic",
-        use_container_width=True,
-        height=600,
-        key="data_editor",
-        on_change=_sync_editor,
-    )
-
-
 def build_prompt(rows: list[dict]) -> str:
     """Construct the prompt for the AI model."""
     categories = "\n".join(
@@ -134,12 +46,11 @@ def build_prompt(rows: list[dict]) -> str:
     )
 
 
-def classify_threats(api_key: str, base_url: str) -> None:
-    """Call the AI model via OpenAI and populate the output table."""
-    # Exclude rows where the user has not provided any information. These
-    # placeholder rows would otherwise be sent to the model and also appear in
-    # the final output as spurious blank entries.
-    data = st.session_state.input_df.copy()
+def classify_threats(
+    data: pd.DataFrame, api_key: str, base_url: str = ""
+) -> pd.DataFrame:
+    """Call the AI model via OpenAI and return classified threats."""
+    data = data.copy()
     data = data[
         data["Attack Surface"].astype(str).str.strip().ne("")
         | data["Description"].astype(str).str.strip().ne("")
@@ -155,7 +66,12 @@ def classify_threats(api_key: str, base_url: str) -> None:
         response_format={"type": "json_object"},
         max_tokens=4000,
         messages=[
-            {"role": "system", "content": "You are a threat modeling assistant designed to output JSON without markdown formatting. Output raw JSON"},
+            {
+                "role": "system",
+                "content": (
+                    "You are a threat modeling assistant designed to output JSON without markdown formatting. Output raw JSON"
+                ),
+            },
             {"role": "user", "content": prompt},
         ],
         temperature=0,
@@ -232,49 +148,4 @@ def classify_threats(api_key: str, base_url: str) -> None:
             ]
         )
 
-    st.session_state.results_df = out
-
-
-def main() -> None:
-    """Run the Streamlit application."""
-    st.set_page_config(page_title="Threat Modeling Assistant", layout="wide")
-    st.title("Threat Modeling Assistant")
-    st.write(
-        "Enter attack surfaces and descriptions. Provide your OpenAI API key and optionally a custom API base URL, then submit to classify threats."
-    )
-
-    init_state()
-    api_key, base_url = get_credentials()
-    edit_table()
-
-    col1, col2, col3 = st.columns([1, 1, 1])
-    with col1:
-        if st.button("Submit to AI"):
-            if not api_key:
-                st.error("API key required.")
-            else:
-                classify_threats(api_key, base_url)
-                st.rerun()
-    with col2:
-        if st.button("Clear results"):
-            st.session_state.results_df = pd.DataFrame()
-    with col3:
-        if st.button("Reset input"):
-            st.session_state.input_df = pd.DataFrame(
-                [{"Attack Surface": "", "Description": ""}]
-            )
-            st.session_state["data_editor"] = st.session_state.input_df.copy()
-
-    if not st.session_state.results_df.empty:
-        st.subheader("Classified Threats")
-        st.dataframe(st.session_state.results_df, use_container_width=True)
-        st.download_button(
-            "Download results as CSV",
-            data=st.session_state.results_df.to_csv(index=False).encode("utf-8"),
-            file_name="threats.csv",
-            mime="text/csv",
-        )
-
-
-if __name__ == "__main__":
-    main()
+    return out

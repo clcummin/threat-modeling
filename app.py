@@ -1,8 +1,6 @@
 """Utilities for classifying threats on attack surfaces."""
 
 import json
-import os
-
 import pandas as pd
 from openai import OpenAI
 
@@ -26,14 +24,37 @@ CATEGORIES = [
     {"id": "repudiation", "description": "Denying actions/transactions due to insufficient auditability or tamper-proof logging."},
 ]
 
+
+def format_attack_surfaces(rows: list[dict]) -> str:
+    """Return a markdown table of attack surfaces and descriptions."""
+    surface_rows = [
+        f"| {i} | {r['Attack Surface']} | {r['Description']} |" for i, r in enumerate(rows)
+    ]
+    return "\n".join([
+        "| Index | Attack Surface | Description |",
+        "| --- | --- | --- |",
+        *surface_rows,
+    ])
+
+
+def collect_attack_surfaces() -> list[dict]:
+    """Interactively collect attack surfaces and descriptions from the user."""
+    rows: list[dict] = []
+    while True:
+        surface = input("Attack Surface (leave blank to finish): ").strip()
+        if not surface:
+            break
+        description = input("Description: ").strip()
+        rows.append({"Attack Surface": surface, "Description": description})
+    return rows
+
+
 def build_prompt(rows: list[dict]) -> str:
     """Construct the prompt for the AI model."""
     categories = "\n".join(
         f"{c['id']}: {c['description']}" for c in CATEGORIES
     )
-    surfaces = "\n".join(
-        f"#{i}: {r['Attack Surface']} - {r['Description']}" for i, r in enumerate(rows)
-    )
+    surfaces = format_attack_surfaces(rows)
     return (
         "You are a threat modeling assistant. For each attack surface below, "
         "identify applicable threat categories from this list and provide a "

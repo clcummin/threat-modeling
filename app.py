@@ -5,7 +5,6 @@ import os
 
 import pandas as pd
 import streamlit as st
-import streamlit.components.v1 as components
 from openai import OpenAI
 
 # ---------------------------------------------------------------------------
@@ -38,22 +37,12 @@ DEFAULT_BASE_URL = os.environ.get("OPENAI_BASE_URL", "")
 
 def init_state() -> None:
     """Initialize session state for input and output tables."""
-    if "input_data" not in st.session_state:
-        # Start with a single empty row for user input. ``st.data_editor``
-        # allows users to append rows dynamically, so pre-filling with many
-        # blanks is unnecessary.
-        st.session_state.input_data = pd.DataFrame([
-            {"Attack Surface": "", "Description": ""}
-        ])
-    if "result_data" not in st.session_state:
-        st.session_state.result_data = pd.DataFrame(
-            columns=[
-                "Attack Surface",
-                "Description",
-                "Threat Type",
-                "Threat Description",
-            ]
+    if "input_df" not in st.session_state:
+        st.session_state.input_df = pd.DataFrame(
+            [{"Attack Surface": "", "Description": ""}]
         )
+    if "results_df" not in st.session_state:
+        st.session_state.results_df = pd.DataFrame()
 
 
 def get_credentials() -> tuple[str, str]:
@@ -68,22 +57,10 @@ def get_credentials() -> tuple[str, str]:
 
 
 def edit_table() -> None:
-    """Display and update the attack surface input table.
-
-    The previous implementation assigned the result of ``st.data_editor``
-    directly to ``st.session_state`` on every rerun. This caused an extra
-    rerun while an edit was in progress, occasionally wiping out the user's
-    current input. To avoid this, we now update the stored DataFrame only
-    when the editor reports a change via ``on_change``.
-    """
+    """Display and update the attack surface input table."""
 
     def _sync_editor() -> None:
-        """Synchronize the widget's value back to ``session_state``."""
-        value = st.session_state["data_editor"]
-        # ``st.data_editor`` stores its value in ``session_state`` using either a
-        # ``dict`` or a ``list``. Converting the widget's value to a proper
-        # ``DataFrame`` and writing it back to both ``input_data`` and
-        # ``data_editor`` keeps subsequent reruns stable.
+        value = st.session_state.get("data_editor", st.session_state.input_df)
         if not isinstance(value, pd.DataFrame):
             if isinstance(value, dict):
                 value = pd.DataFrame.from_dict(value, orient="index").reset_index(
@@ -92,18 +69,20 @@ def edit_table() -> None:
             else:
                 value = pd.DataFrame(value)
 
-        # Drop rows where both fields are blank to avoid accumulating extra
-        # empty entries when the user edits the table.
+        for col in ["Attack Surface", "Description"]:
+            if col not in value.columns:
+                value[col] = ""
+
         value = value[
             value["Attack Surface"].astype(str).str.strip().ne("")
             | value["Description"].astype(str).str.strip().ne("")
         ].reset_index(drop=True)
 
-        st.session_state.input_data = value
+        st.session_state.input_df = value
         st.session_state["data_editor"] = value
 
     st.data_editor(
-        st.session_state.input_data,
+        st.session_state.input_df,
         num_rows="dynamic",
         use_container_width=True,
         height=600,
@@ -137,7 +116,7 @@ def classify_threats(api_key: str, base_url: str) -> None:
     # Exclude rows where the user has not provided any information. These
     # placeholder rows would otherwise be sent to the model and also appear in
     # the final output as spurious blank entries.
-    data = st.session_state.input_data.copy()
+    data = st.session_state.input_df.copy()
     data = data[
         data["Attack Surface"].astype(str).str.strip().ne("")
         | data["Description"].astype(str).str.strip().ne("")
@@ -183,20 +162,25 @@ def classify_threats(api_key: str, base_url: str) -> None:
     # Build a mapping from response index to threats for easier lookup
     items_by_index = {item.get("index"): item.get("threats", []) for item in parsed}
 
-    new_rows = []
+    new_rows: list[dict] = []
     for idx, row in enumerate(rows):
-        threats = items_by_index.get(idx, [])
-        if threats:
-            for threat in threats:
-                new_rows.append(
-                    {
-                        "Attack Surface": row["Attack Surface"],
-                        "Description": row["Description"],
-                        "Threat Type": threat.get("type", ""),
-                        "Threat Description": threat.get("description", ""),
-                    }
-                )
-        else:
+        threats = items_by_index.get(idx, []) or []
+
+        for t in threats:
+            t_type = (t.get("type") or "").strip()
+            t_desc = (t.get("description") or "").strip()
+            if not (t_type or t_desc):
+                continue
+            new_rows.append(
+                {
+                    "Attack Surface": row["Attack Surface"],
+                    "Description": row["Description"],
+                    "Threat Type": t_type,
+                    "Threat Description": t_desc,
+                }
+            )
+
+        if not threats:
             new_rows.append(
                 {
                     "Attack Surface": row["Attack Surface"],
@@ -206,7 +190,26 @@ def classify_threats(api_key: str, base_url: str) -> None:
                 }
             )
 
-    st.session_state.result_data = pd.DataFrame(new_rows)
+    if new_rows:
+        out = pd.DataFrame(new_rows).drop_duplicates(
+            subset=[
+                "Attack Surface",
+                "Description",
+                "Threat Type",
+                "Threat Description",
+            ]
+        ).reset_index(drop=True)
+    else:
+        out = pd.DataFrame(
+            columns=[
+                "Attack Surface",
+                "Description",
+                "Threat Type",
+                "Threat Description",
+            ]
+        )
+
+    st.session_state.results_df = out
 
 
 def main() -> None:
@@ -218,39 +221,35 @@ def main() -> None:
     )
 
     init_state()
-    tab_input, tab_output = st.tabs(["Inputs", "Threat Mapping"])
+    api_key, base_url = get_credentials()
+    edit_table()
 
-    with tab_input:
-        api_key, base_url = get_credentials()
-        edit_table()
-
-        if st.button("Run"):
+    col1, col2, col3 = st.columns([1, 1, 1])
+    with col1:
+        if st.button("Submit to AI"):
             if not api_key:
                 st.error("API key required.")
             else:
-                try:
-                    classify_threats(api_key, base_url)
-                    st.session_state.switch_to_output = True
-                    st.rerun()
-                except Exception as e:
-                    st.error(str(e))
+                classify_threats(api_key, base_url)
+                st.rerun()
+    with col2:
+        if st.button("Clear results"):
+            st.session_state.results_df = pd.DataFrame()
+    with col3:
+        if st.button("Reset input"):
+            st.session_state.input_df = pd.DataFrame(
+                [{"Attack Surface": "", "Description": ""}]
+            )
+            st.session_state["data_editor"] = st.session_state.input_df.copy()
 
-    with tab_output:
-        st.dataframe(
-            st.session_state.result_data,
-            use_container_width=True,
-        )
-
-    if st.session_state.get("switch_to_output"):
-        st.session_state.switch_to_output = False
-        components.html(
-            """
-            <script>
-            const tabs = window.parent.document.querySelectorAll('.stTabs button');
-            if (tabs.length > 1) { tabs[1].click(); }
-            </script>
-            """,
-            height=0,
+    if not st.session_state.results_df.empty:
+        st.subheader("Classified Threats")
+        st.dataframe(st.session_state.results_df, use_container_width=True)
+        st.download_button(
+            "Download results as CSV",
+            data=st.session_state.results_df.to_csv(index=False).encode("utf-8"),
+            file_name="threats.csv",
+            mime="text/csv",
         )
 
 

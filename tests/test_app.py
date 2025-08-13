@@ -21,7 +21,7 @@ def test_build_prompt_contains_surfaces_and_categories():
 
 def test_classify_threats_populates_dataframe():
     st.session_state.clear()
-    st.session_state.data = pd.DataFrame([
+    st.session_state.input_data = pd.DataFrame([
         {"Attack Surface": "Surface A", "Description": "Desc A"},
         {"Attack Surface": "Surface B", "Description": "Desc B"},
     ])
@@ -57,7 +57,7 @@ def test_classify_threats_populates_dataframe():
     with patch("app.OpenAI", return_value=mock_client):
         app.classify_threats("test-key", base_url="")
 
-    df = st.session_state.data
+    df = st.session_state.result_data
     assert len(df) == 2
     assert list(df["Attack Surface"]) == ["Surface A", "Surface B"]
     assert df.loc[0, "Threat Type"] == "denial_of_service"
@@ -68,7 +68,7 @@ def test_classify_threats_populates_dataframe():
 def test_classify_threats_handles_single_object_response():
     """Ensure classify_threats can handle a top-level JSON object."""
     st.session_state.clear()
-    st.session_state.data = pd.DataFrame([
+    st.session_state.input_data = pd.DataFrame([
         {"Attack Surface": "Surface A", "Description": "Desc A"},
         {"Attack Surface": "Surface B", "Description": "Desc B"},
     ])
@@ -103,7 +103,7 @@ def test_classify_threats_handles_single_object_response():
     with patch("app.OpenAI", return_value=mock_client):
         app.classify_threats("test-key", base_url="")
 
-    df = st.session_state.data
+    df = st.session_state.result_data
     assert len(df) == 2
     assert df.loc[0, "Threat Type"] == "denial_of_service"
     assert df.loc[0, "Threat Description"] == "Example threat"
@@ -112,7 +112,7 @@ def test_classify_threats_handles_single_object_response():
 
 def test_classify_threats_multiple_threats_create_multiple_rows():
     st.session_state.clear()
-    st.session_state.data = pd.DataFrame([
+    st.session_state.input_data = pd.DataFrame([
         {"Attack Surface": "Surface A", "Description": "Desc A"},
     ])
 
@@ -150,7 +150,7 @@ def test_classify_threats_multiple_threats_create_multiple_rows():
     with patch("app.OpenAI", return_value=mock_client):
         app.classify_threats("test-key", base_url="")
 
-    df = st.session_state.data
+    df = st.session_state.result_data
     assert len(df) == 2
     assert all(df["Attack Surface"] == "Surface A")
     assert set(df["Threat Type"]) == {"denial_of_service", "trojan"}
@@ -159,7 +159,7 @@ def test_classify_threats_multiple_threats_create_multiple_rows():
 def test_edit_table_persists_edits_via_on_change():
     """Edits in the table should sync to session_state via on_change."""
     st.session_state.clear()
-    st.session_state.data = pd.DataFrame([
+    st.session_state.input_data = pd.DataFrame([
         {"Attack Surface": "", "Description": ""}
     ])
 
@@ -182,4 +182,4 @@ def test_edit_table_persists_edits_via_on_change():
     with patch("app.st.data_editor", side_effect=fake_data_editor):
         app.edit_table()
 
-    assert st.session_state.data.equals(updated_df)
+    assert st.session_state.input_data.equals(updated_df)

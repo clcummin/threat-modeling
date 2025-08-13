@@ -149,3 +149,60 @@ def test_classify_threats_multiple_threats_create_multiple_rows():
     assert all(df["Attack Surface"] == "Surface A")
     assert set(df["Threat Type"]) == {"denial_of_service", "trojan"}
 
+
+def test_classify_threats_ignores_incomplete_threat_entries():
+    data = pd.DataFrame([
+        {"Attack Surface": "Surface A", "Description": "Desc A"},
+    ])
+
+    mock_response = SimpleNamespace(
+        choices=[
+            SimpleNamespace(
+                message=SimpleNamespace(
+                    content=json.dumps(
+                        [
+                            {
+                                "index": 0,
+                                "threats": [
+                                    {"type": "denial_of_service", "description": ""},
+                                    {"description": "No type"},
+                                ],
+                            }
+                        ]
+                    )
+                )
+            )
+        ]
+    )
+
+    mock_client = SimpleNamespace(
+        chat=SimpleNamespace(
+            completions=SimpleNamespace(create=lambda **kwargs: mock_response)
+        )
+    )
+
+    with patch("app.OpenAI", return_value=mock_client):
+        df = app.classify_threats(data, "test-key", base_url="")
+
+    # Incomplete threats should be ignored, resulting in an empty threat row
+    assert len(df) == 1
+    assert df.loc[0, "Threat Type"] == ""
+    assert df.loc[0, "Threat Description"] == ""
+
+
+def test_ensure_blank_surface_row_appends_blank_only_after_complete_row():
+    df = pd.DataFrame([{"Attack Surface": "API", "Description": ""}])
+    result = app.ensure_blank_surface_row(df)
+    # No new row added until both fields are populated
+    assert len(result) == 1
+    assert result.iloc[0]["Attack Surface"] == "API"
+
+    full = pd.DataFrame([{"Attack Surface": "API", "Description": "Desc"}])
+    result = app.ensure_blank_surface_row(full)
+    assert len(result) == 2
+    assert result.iloc[1]["Attack Surface"] == ""
+
+    # Calling again should not create additional empty rows
+    result = app.ensure_blank_surface_row(result)
+    assert len(result) == 2
+

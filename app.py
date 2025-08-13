@@ -36,19 +36,6 @@ def format_attack_surfaces(rows: list[dict]) -> str:
         *surface_rows,
     ])
 
-
-def collect_attack_surfaces() -> list[dict]:
-    """Interactively collect attack surfaces and descriptions from the user."""
-    rows: list[dict] = []
-    while True:
-        surface = input("Attack Surface (leave blank to finish): ").strip()
-        if not surface:
-            break
-        description = input("Description: ").strip()
-        rows.append({"Attack Surface": surface, "Description": description})
-    return rows
-
-
 def build_prompt(rows: list[dict]) -> str:
     """Construct the prompt for the AI model."""
     categories = "\n".join(
@@ -170,3 +157,31 @@ def classify_threats(
         )
 
     return out
+
+
+def main() -> None:
+    """Run the Streamlit interface for collecting attack surfaces."""
+    import streamlit as st
+
+    st.title("Threat Modeling")
+    st.write("Enter attack surfaces and descriptions below.")
+
+    if "attack_surfaces" not in st.session_state:
+        st.session_state["attack_surfaces"] = pd.DataFrame(
+            [{"Attack Surface": "", "Description": ""}]
+        )
+
+    edited_df = st.data_editor(
+        st.session_state["attack_surfaces"],
+        num_rows="dynamic",
+        use_container_width=True,
+        key="attack_surface_editor",
+    )
+
+    st.session_state["attack_surfaces"] = edited_df
+
+    st.dataframe(edited_df, use_container_width=True)
+
+
+if __name__ == "__main__":
+    main()

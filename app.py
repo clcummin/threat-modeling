@@ -112,11 +112,13 @@ def classify_threats(
     new_rows: list[dict] = []
     for idx, row in enumerate(rows):
         threats = items_by_index.get(idx, []) or []
+        added_any = False
 
         for t in threats:
             t_type = (t.get("type") or "").strip()
             t_desc = (t.get("description") or "").strip()
-            if not (t_type or t_desc):
+            # Skip incomplete threat entries where either field is missing.
+            if not (t_type and t_desc):
                 continue
             new_rows.append(
                 {
@@ -126,8 +128,9 @@ def classify_threats(
                     "Threat Description": t_desc,
                 }
             )
+            added_any = True
 
-        if not threats:
+        if not added_any:
             new_rows.append(
                 {
                     "Attack Surface": row["Attack Surface"],
@@ -159,6 +162,33 @@ def classify_threats(
     return out
 
 
+def ensure_blank_surface_row(data: pd.DataFrame) -> pd.DataFrame:
+    """Return a copy with a single empty row when appropriate.
+
+    Fully empty rows are dropped. A new blank row is appended only when all
+    existing rows are complete so that reruns happen after an entry is finished
+    rather than as soon as a single cell is populated.
+    """
+    df = data.copy()
+    if {"Attack Surface", "Description"} - set(df.columns):
+        df = df.reindex(columns=["Attack Surface", "Description"], fill_value="")
+
+    mask = (
+        df["Attack Surface"].astype(str).str.strip().ne("")
+        | df["Description"].astype(str).str.strip().ne("")
+    )
+    df = df[mask].reset_index(drop=True)
+
+    # Append a blank row only when there is no data or the last row is complete
+    if df.empty or (
+        df.iloc[-1]["Attack Surface"].strip() and df.iloc[-1]["Description"].strip()
+    ):
+        blank = pd.DataFrame([{"Attack Surface": "", "Description": ""}])
+        df = pd.concat([df, blank], ignore_index=True)
+
+    return df
+
+
 def main() -> None:
     """Run the Streamlit interface for collecting attack surfaces."""
     import streamlit as st
@@ -167,9 +197,13 @@ def main() -> None:
     st.write("Enter attack surfaces and descriptions below.")
 
     if "attack_surfaces" not in st.session_state:
-        st.session_state["attack_surfaces"] = pd.DataFrame(
-            [{"Attack Surface": "", "Description": ""}]
+        st.session_state["attack_surfaces"] = ensure_blank_surface_row(
+            pd.DataFrame(columns=["Attack Surface", "Description"])
         )
+
+    st.session_state["attack_surfaces"] = ensure_blank_surface_row(
+        st.session_state["attack_surfaces"]
+    )
 
     edited_df = st.data_editor(
         st.session_state["attack_surfaces"],
@@ -178,9 +212,9 @@ def main() -> None:
         key="attack_surface_editor",
     )
 
-    st.session_state["attack_surfaces"] = edited_df
+    st.session_state["attack_surfaces"] = ensure_blank_surface_row(edited_df)
 
-    st.dataframe(edited_df, use_container_width=True)
+    st.dataframe(st.session_state["attack_surfaces"], use_container_width=True)
 
 
 if __name__ == "__main__":

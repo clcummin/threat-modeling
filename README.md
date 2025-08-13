@@ -19,6 +19,18 @@ Utilities for documenting potential threats on attack surfaces.
    results = app.classify_threats(df, api_key="sk-...", base_url="https://llm.labs.blackduck.com/v1")
    ```
 
+## Streamlit Interface
+
+Launch a simple UI for collecting attack surfaces and generating threats:
+
+```bash
+streamlit run app.py
+```
+
+Enter attack surfaces on the first tab. Provide your API key (and optional base
+URL) then click **Generate Threats**. A read-only table of threats will appear on
+the *Threats* tab, with each threat on its own row.
+
 ### Threat Categories
 
 - `information_leakage` – Exposure of sensitive data via the surface.

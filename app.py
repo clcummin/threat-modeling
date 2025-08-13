@@ -38,12 +38,12 @@ DEFAULT_BASE_URL = os.environ.get("OPENAI_BASE_URL", "")
 def init_state() -> None:
     """Initialize session state with an editable dataframe."""
     if "data" not in st.session_state:
-        # Prepopulate the table with a handful of empty rows so the user
-        # is presented with a small, manageable starting point while still
-        # retaining the ability to add more surfaces dynamically.
-        st.session_state.data = pd.DataFrame(
-            [{"Attack Surface": "", "Description": ""} for _ in range(5)]
-        )
+        # Start with a single empty row. ``st.data_editor`` allows users to
+        # append additional rows dynamically, so there is no need to prefill
+        # the table with many blank entries that must later be cleaned up.
+        st.session_state.data = pd.DataFrame([
+            {"Attack Surface": "", "Description": ""}
+        ])
 
 
 def get_credentials() -> tuple[str, str]:
@@ -75,26 +75,32 @@ def edit_table() -> None:
     def _sync_editor() -> None:
         """Synchronize the widget's value back to ``session_state``."""
         value = st.session_state["data_editor"]
-        # ``st.data_editor`` stores its value in ``session_state`` using a
-        # plain ``dict`` when edited.  Passing that dict back to the widget on
-        # the next rerun causes Pandas to interpret it as a nested structure and
-        # raise ``AttributeError: 'list' object has no attribute 'items'`` while
-        # attempting to convert it to a ``DataFrame``.  Converting the widget's
-        # value explicitly ensures ``st.session_state.data`` remains a
-        # ``DataFrame`` regardless of how Streamlit stores the intermediate
-        # representation.
+        # ``st.data_editor`` stores its value in ``session_state`` using either a
+        # ``dict`` or a ``list``.  Feeding these raw structures back into the
+        # widget on the next rerun leads Pandas to raise
+        # ``AttributeError: 'list' object has no attribute 'items'`` while trying
+        # to interpret the data.  Converting the widget's value to a proper
+        # ``DataFrame`` and writing it back to both ``data`` and ``data_editor``
+        # keeps subsequent reruns stable.
         if not isinstance(value, pd.DataFrame):
-            # ``st.data_editor`` may store the edited value either as a dictionary
-            # (via ``DataFrame.to_dict(orient="index")``) or as a list of
-            # records.  Handle both possibilities to avoid ``AttributeError`` when
-            # Pandas expects mapping-like objects during conversion.
             if isinstance(value, dict):
                 value = pd.DataFrame.from_dict(value, orient="index").reset_index(
                     drop=True
                 )
             else:
                 value = pd.DataFrame(value)
+
+        # Drop rows where both fields are blank to avoid accumulating extra
+        # empty entries when the user edits the table.
+        value = value[
+            value["Attack Surface"].astype(str).str.strip().ne("")
+            | value["Description"].astype(str).str.strip().ne("")
+        ].reset_index(drop=True)
+
         st.session_state.data = value
+        # Ensure the widget's stored value is also a DataFrame so that
+        # ``st.data_editor`` receives a compatible object on the next rerun.
+        st.session_state["data_editor"] = value
 
     st.data_editor(
         st.session_state.data,
@@ -128,10 +134,16 @@ def build_prompt(rows: list[dict]) -> str:
 
 def classify_threats(api_key: str, base_url: str) -> None:
     """Call the AI model via OpenAI and populate the table with threat data."""
-    rows = (
-        st.session_state.data[["Attack Surface", "Description"]]
-        .fillna("")
-        .to_dict(orient="records")
+    # Exclude rows where the user has not provided any information. These
+    # placeholder rows would otherwise be sent to the model and also appear in
+    # the final output as spurious blank entries.
+    data = st.session_state.data.copy()
+    data = data[
+        data["Attack Surface"].astype(str).str.strip().ne("")
+        | data["Description"].astype(str).str.strip().ne("")
+    ]
+    rows = data[["Attack Surface", "Description"]].fillna("").to_dict(
+        orient="records"
     )
     prompt = build_prompt(rows)
 

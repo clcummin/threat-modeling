@@ -183,3 +183,29 @@ def test_edit_table_persists_edits_via_on_change():
         app.edit_table()
 
     assert st.session_state.input_df.equals(updated_df)
+
+
+def test_edit_table_handles_data_state_without_input_df():
+    """edit_table should fall back to ``data`` when ``input_df`` is absent."""
+    st.session_state.clear()
+    st.session_state.data = pd.DataFrame([
+        {"Attack Surface": "", "Description": ""}
+    ])
+
+    updated_df = pd.DataFrame([
+        {"Attack Surface": "Surface Y", "Description": "Desc Y"}
+    ])
+
+    def fake_data_editor(*args, **kwargs):
+        callback = kwargs.get("on_change")
+        assert callable(callback)
+        # Directly store DataFrame to simulate editor returning DataFrame
+        st.session_state["data_editor"] = updated_df
+        callback()
+        return updated_df
+
+    with patch("app.st.data_editor", side_effect=fake_data_editor):
+        app.edit_table()
+
+    assert "input_df" not in st.session_state
+    assert st.session_state.data.equals(updated_df)

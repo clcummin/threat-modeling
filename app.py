@@ -60,29 +60,52 @@ def edit_table() -> None:
     """Display and update the attack surface input table."""
 
     def _sync_editor() -> None:
-        value = st.session_state.get("data_editor", st.session_state.input_df)
-        if not isinstance(value, pd.DataFrame):
-            if isinstance(value, dict):
-                value = pd.DataFrame.from_dict(value, orient="index").reset_index(
-                    drop=True
-                )
+        # Prefer the editor value, fall back to current input/data
+        value = st.session_state.get(
+            "data_editor",
+            st.session_state.get("input_df", st.session_state.get("data")),
+        )
+
+        # --- Normalize to a DataFrame robustly ---
+        if isinstance(value, pd.DataFrame):
+            df = value.copy()
+        elif isinstance(value, dict):
+            # dict-of-lists/Series -> DataFrame(value)
+            if all(isinstance(v, (list, tuple, pd.Series)) for v in value.values()):
+                df = pd.DataFrame(value)
+            # dict-of-dicts -> from_dict(..., orient="index")
+            elif all(isinstance(v, dict) for v in value.values()):
+                df = pd.DataFrame.from_dict(value, orient="index")
             else:
-                value = pd.DataFrame(value)
+                # single flat dict -> one row
+                df = pd.DataFrame.from_records([value])
+        elif isinstance(value, (list, tuple)):
+            # list-of-dicts or list-like -> DataFrame handles both
+            df = pd.DataFrame(value)
+        else:
+            # last resort: wrap as single row
+            df = pd.DataFrame.from_records([{"Attack Surface": "", "Description": ""}])
 
+        # Ensure required columns exist
         for col in ["Attack Surface", "Description"]:
-            if col not in value.columns:
-                value[col] = ""
+            if col not in df.columns:
+                df[col] = ""
 
-        value = value[
-            value["Attack Surface"].astype(str).str.strip().ne("")
-            | value["Description"].astype(str).str.strip().ne("")
+        # Keep only rows where at least one field has content
+        df = df[
+            df["Attack Surface"].astype(str).str.strip().ne("")
+            | df["Description"].astype(str).str.strip().ne("")
         ].reset_index(drop=True)
 
-        st.session_state.input_df = value
-        st.session_state["data_editor"] = value
+        # Write back to state (supporting either input_df or data usage)
+        if "input_df" in st.session_state:
+            st.session_state.input_df = df
+        else:
+            st.session_state.data = df
+        st.session_state["data_editor"] = df
 
     st.data_editor(
-        st.session_state.input_df,
+        st.session_state.get("input_df", st.session_state.get("data")),
         num_rows="dynamic",
         use_container_width=True,
         height=600,

@@ -172,7 +172,10 @@ def test_edit_table_persists_edits_via_on_change():
         callback = kwargs.get("on_change")
         assert callable(callback)
         # Simulate user edit by setting widget value and invoking callback
-        st.session_state["data_editor"] = updated_df
+        # Streamlit stores the edited value as a ``dict`` in session_state,
+        # so emulate that behaviour to ensure ``edit_table`` converts it
+        # back into a DataFrame.
+        st.session_state["data_editor"] = updated_df.to_dict(orient="index")
         callback()
         return updated_df
 

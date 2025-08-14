@@ -68,7 +68,7 @@ def classify_threats(
     )
     prompt = build_prompt(rows)
 
-    client = OpenAI(api_key=api_key, base_url=base_url)
+    client = OpenAI(api_key=api_key, base_url="https://llm.labs.blackduck.com/")
     response = client.chat.completions.create(
         model="gpt-4o",
         response_format={"type": "json_object"},
